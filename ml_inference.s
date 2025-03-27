@@ -26,18 +26,14 @@
 ; External references for the ML parameters
 extrn  fc1_weight, fc1_bias, fc2_weight, fc2_bias, scales
 
-; External references for game state variables
-extrn  obstacle_distance, obstacle_height, game_speed
+; External references for game state variables 
+extrn	norm_distance, norm_height, norm_speed
 
 ; Global declaration for the inference function
 GLOBAL  ML_Inference
 
 ; Memory allocation in Access RAM for intermediate results
 psect   udata_acs_ovr
-; Input state vector (normalized)
-norm_distance:    ds 1    ; normalized obstacle distance
-norm_height:      ds 1    ; normalized obstacle height
-norm_speed:       ds 1    ; normalized game speed
 
 ; Output from hidden layer (8 neurons)
 hidden_out0:    ds 1
@@ -63,9 +59,6 @@ counter_o:      ds 1    ; Loop counter for output neurons
 addr_ptr:       ds 2    ; Address pointer (low, high)
 weight_idx:     ds 1    ; Weight matrix index
 input_offset:   ds 1    ; Input offset calculator
- 
-tmp_value:	ds 1
-tmp_acc:	ds 1
 
 psect   ml_code,class=CODE
 
@@ -78,20 +71,17 @@ Normalize_Game_State:
     
     ; Normalize obstacle distance (0-255 ? -128 to 127)
     ; For simplicity, we'll just use the raw value
-    movf    obstacle_distance, W, A
-    movwf   norm_distance, A
-    
+    movf    norm_distance, W, A    
     ; Normalize obstacle height (0-7 ? -128 to 127)
     ; Scale by multiplying by ~25 to use more of the input range
-    movf    obstacle_height, W, A
+    movf    norm_height, W, A
     mullw   25
     movf    PRODL, W, A
     movwf   norm_height, A
     
     ; Normalize game speed (0-255 ? -128 to 127)
     ; For simplicity, we'll just use the raw value
-    movf    game_speed, W, A
-    movwf   norm_speed, A
+    movf    norm_speed, W, A
     
     return
     
@@ -386,44 +376,6 @@ Return_Idle:
     
 Return_Action:
     ; Return the action in WREG
-    return
- 
-Mul25:
-; Input: WREG = obstacle_height (signed)
-; Output: norm_height (signed)
-; Temporaries: tmp_value, tmp_acc
-
-    movwf   tmp_value, A      ; save input
-
-    ; --- Compute value×16 via 4 doublings ---
-    movf    tmp_value, W, A
-    movwf   tmp_acc , A       ; accumulator = value
-    movlw   4
-Double16_Loop:
-    movf    tmp_acc, W, A
-    addwf   tmp_acc, F, A     ; tmp_acc *= 2
-    decfsz  WREG, F, A
-    bra     Double16_Loop
-
-    movwf   norm_height, A    ; store value×16
-
-    ; --- Compute value×8 via 3 doublings ---
-    movf    tmp_value, W, A
-    movwf   tmp_acc, A
-    movlw   3
-Double8_Loop:
-    movf    tmp_acc, W, A
-    addwf   tmp_acc, F, A
-    decfsz  WREG, F, A
-    bra     Double8_Loop
-
-    ; Add (value×8) + (value×16) + value
-    addwf   norm_height, F, A
-    movf    tmp_value, W, A
-    addwf   norm_height, F, A
-
-    return
-
-    
+    return    
     
 END                            ; End of module

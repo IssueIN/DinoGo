@@ -10,7 +10,7 @@ extrn	Check_Collision, Is_Game_Over
 extrn	GameOverHandler
 extrn	GLCD_Read_Screen_UART, Display_RNG, Draw_Digit
 extrn	Display_Agent_Freq
-extrn	ML_Inference, Normalize_Game_State
+extrn	ML_Inference
 extrn	delay_x4us, delay_ms
 extrn	Prepare_State_Vector
  
@@ -21,13 +21,9 @@ page_coord:	    ds 1
 y_coord:	    ds 1
 frame_cnt:	    ds 1
 DINO_page:	    ds 1
-bird_delay_cnt:	    ds 1
 DINO_1_2:	    ds 1
-DINO_y:		    ds 1
 score_update_cnt:   ds 1
 DG_tmp:		    ds 1
-
-ML_STATE:	    ds 1
 
 ; New variables:
 DINO_STATE:	    ds 1    ; 0=idle, 1 = ascending, 2 = descending, 3=ducking
@@ -36,15 +32,14 @@ JUMP_DELAY:	    ds 1    ; frames to wait at this phases
 psect	data
 FRAME_DELAY	    EQU 3
 SCORE_UPDATE_FREQ   EQU	30
+DINO_y		    EQU 25
+ML_STATE	    EQU	0
 
 psect	game_display_code,class=CODE
  
 Initialize:
     movlw   0
     movwf   DINO_1_2, A
-    
-    movlw   1
-    movwf   ML_STATE, A
     
     ; Initialize continuous jump:
     movlw   0
@@ -53,8 +48,6 @@ Initialize:
     movwf   DINO_page, A      ; begin at page 6
     movlw   15
     movwf   JUMP_DELAY, A      ; initial delay
-    movlw   25
-    movwf   DINO_y, A
     
     clrf    score_update_cnt, A
    
@@ -85,7 +78,6 @@ Manual_Mode:
 
 ML_Mode:
     call    Prepare_State_Vector
-    call    Normalize_Game_State
     call    ML_Inference
     movwf   pressed_button, A
     call    GLCD_Render_ML
@@ -151,7 +143,7 @@ DINO_RUN:
     movlw   6     
     movwf   page_coord, A           ; Set page coordinate for dinosaur
     movwf   DINO_page, A   
-    movf    DINO_y, W, A     
+    movlw   DINO_y     
     movwf   y_coord, A            ; Set y coordinate for dinosaur
     
     ; Check which dinosaur sprite to render:
@@ -168,7 +160,7 @@ Use_RUN2:
 DINO_JUMP:    
     call    Update_Jump
     ; Set a fixed horizontal coordinate for the dinosaur (y_coord remains same)
-    movf    DINO_y, W, A
+    movlw   DINO_y
     movwf   y_coord, A 
     movf    DINO_page, W, A
     movwf   page_coord, A

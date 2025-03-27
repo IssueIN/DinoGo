@@ -26,8 +26,6 @@ active_agent_flag:  ds	1 ;0-no 1-1 2-2 3-both
 bird_h:		ds 1
 bird_1_2:	ds 1
 spawn_counter:	ds 1
-obstacle_type_tmp:  ds	1
-render_type_tmp:    ds	1
 tmp:		    ds	1
 used_rng_ob:	    ds	1
 used_rng_bird:	    ds	1
@@ -87,10 +85,10 @@ Update_Spawn_Timer:
     
     call    Next_RNG
     call    Get_Random_Obstacle
-    movwf   obstacle_type_tmp, A
+    movwf   tmp, A
     
     movlw   0
-    cpfseq  obstacle_type_tmp, A
+    cpfseq  tmp, A
     bra     _check_agent_1
     goto    _end_update
  
@@ -147,7 +145,7 @@ Agent_1_init:
     
     call    Update_Agent_Freq
     
-    movf    obstacle_type_tmp, W, A
+    movf    tmp, W, A
     movwf   agent_1_type, A
     movwf   used_rng_ob, A
     
@@ -239,7 +237,7 @@ Agent_2_init:
     
     call    Update_Agent_Freq
     
-    movf    obstacle_type_tmp, W, A
+    movf    tmp, W, A
     movwf   agent_2_type, A
     movwf   used_rng_ob, A
     
@@ -313,27 +311,27 @@ End_Agent_2:
     
 ; 1 -> L, 2 -> M, 3 -> S, 4 -> B
 Get_Render_Sprite:
-    movwf   render_type_tmp, A
+    movwf   tmp, A
     movlw   1
-    cpfseq  render_type_tmp, A
+    cpfseq  tmp, A
     goto    _check_type_2
     goto    Render_Large_Cactus
 
 _check_type_2:    
     movlw   2
-    cpfseq  render_type_tmp, A
+    cpfseq  tmp, A
     goto    _check_type_3
     goto    Render_Medium_Cactus
 
 _check_type_3:    
     movlw   3
-    cpfseq  render_type_tmp, A
+    cpfseq  tmp, A
     goto    _check_type_4
     goto    Render_Small_Cactus
 
 _check_type_4:
     movlw   4
-    cpfseq  render_type_tmp, A
+    cpfseq  tmp, A
     goto    _end_render_sprite
     goto    Render_Bird
    
@@ -376,28 +374,28 @@ End_Render_Bird:
 
     
 Clear_Render_Sprite:
-    movwf   render_type_tmp, A   ; store type
+    movwf   tmp, A   ; store type
 
     movlw   1
-    cpfseq  render_type_tmp, A
+    cpfseq  tmp, A
     goto    _clr_check_type_2
     goto    Clear_Large_Cactus
 
 _clr_check_type_2:
     movlw   2
-    cpfseq  render_type_tmp, A
+    cpfseq  tmp, A
     goto    _clr_check_type_3
     goto    Clear_Medium_Cactus
 
 _clr_check_type_3:
     movlw   3
-    cpfseq  render_type_tmp, A
+    cpfseq  tmp, A
     goto    _clr_check_type_4
     goto    Clear_Small_Cactus
 
 _clr_check_type_4:
     movlw   4
-    cpfseq  render_type_tmp, A
+    cpfseq  tmp, A
     goto    _clr_end
     goto    Clear_Bird
 

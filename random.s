@@ -9,7 +9,7 @@ global	Draw_Digit
 extrn   GLCD_Set_Page, GLCD_Set_CS, GLCD_Data
 extrn	GLCD_Render_RNG, GLCD_Render_Slash
 extrn	used_rng_ob, used_rng_bird
-    
+
 ; Variables in access bank
 psect   udata_acs
 lfsr_low:       ds 1    ; LFSR low byte

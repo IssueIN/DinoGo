@@ -17,16 +17,13 @@ GLCD_cnt_pg:	    ds 1
 GLCD_tmp:	    ds 1   ; reserve 1 byte for temporary use
 GLCD_counter:	    ds 1   ; reserve 1 byte for counting
 GLCD_pg:	    ds 1
-GLCD_y:		    ds 1
 y_add:		    ds 1
-y_adjusted:	    ds 1
 _sprite_h:	    ds 1
 _sprite_l:	    ds 1
 _sprite_size:	    ds 1
-clear_page:	    ds 1
-clear_y:	    ds 1
+ 
 
-    
+psect	data
 	;Define Register Address
 	GLCD_CS1  EQU 0  ; Chip Select 1 (RB0)
 	GLCD_CS2  EQU 1  ; Chip Select 2 (RB1)
@@ -34,11 +31,7 @@ clear_y:	    ds 1
 	GLCD_RW   EQU 3  ; Read/Write (RB3)
 	GLCD_E    EQU 4  ; Enable (RB4)
 	GLCD_RST  EQU 5  ; Reset (RB5)
- 
-psect	udata_bank4
-dino_run_array:	    ds 0x80 ; reserve 128 bytes for dino_run_data
-
-psect	data
+  
 DINO_RUN1_DATA:
     db	0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0xFE, 0xFF, 0xFF, 0xFF, 0xF7, 0xB7, 0xBF, 0x3F, 0x3F
     db	0x0F, 0x1E, 0x3C, 0x38, 0xFF, 0x7F, 0x3F, 0x7F, 0xFF, 0x1F, 0x0F, 0x02, 0x00, 0x00, 0x00
@@ -1122,9 +1115,9 @@ GLCD_Clear_DINO_JUMP:
     movlw   DINO_JUMP_SIZE
     movwf   GLCD_counter, A
     movf    DINO_page, W, A
-    movwf   clear_page, A
+    movwf   GLCD_pg, A
     movf    DINO_y, W, A
-    movwf   clear_y, A
+    movwf   y_add, A
     call    GLCD_Clear_Area
     return  
  
@@ -1136,9 +1129,9 @@ GLCD_Clear_Cactus_Large:
     movlw   CACTUS_LARGE_SIZE
     movwf   GLCD_counter, A
     movf    page_coord, W, A
-    movwf   clear_page, A
+    movwf   GLCD_pg, A
     movf    y_coord, W, A
-    movwf   clear_y, A
+    movwf   y_add, A
     call    GLCD_Clear_Area
     return  
     
@@ -1150,9 +1143,9 @@ GLCD_Clear_Cactus_Medium:
     movlw   CACTUS_MEDIUM_SIZE
     movwf   GLCD_counter, A
     movf    page_coord, W, A
-    movwf   clear_page, A
+    movwf   GLCD_pg, A
     movf    y_coord, W, A
-    movwf   clear_y, A
+    movwf   y_add, A
     call    GLCD_Clear_Area
     return  
  
@@ -1164,9 +1157,9 @@ GLCD_Clear_Cactus_Small:
     movlw   CACTUS_SMALL_SIZE
     movwf   GLCD_counter, A
     movf    page_coord, W, A
-    movwf   clear_page, A
+    movwf   GLCD_pg, A
     movf    y_coord, W, A
-    movwf   clear_y, A
+    movwf   y_add, A
     call    GLCD_Clear_Area
     return 
 
@@ -1178,9 +1171,9 @@ GLCD_Clear_Bird1:
     movlw   BIRD1_SIZE
     movwf   GLCD_counter, A
     movf    page_coord, W, A
-    movwf   clear_page, A
+    movwf   GLCD_pg, A
     movf    y_coord, W, A
-    movwf   clear_y, A
+    movwf   y_add, A
     call    GLCD_Clear_Area
     return 
     
@@ -1192,9 +1185,9 @@ GLCD_Clear_Bird2:
     movlw   BIRD2_SIZE
     movwf   GLCD_counter, A
     movf    page_coord, W, A
-    movwf   clear_page, A
+    movwf   GLCD_pg, A
     movf    y_coord, W, A
-    movwf   clear_y, A
+    movwf   y_add, A
     call    GLCD_Clear_Area
     return 
     
@@ -1209,12 +1202,12 @@ GLCD_Clear_Bird2:
     
     movf   _sprite_l, W, A
     movwf   GLCD_cnt_y, A
-    movf    clear_page, W, A
+    movf    GLCD_pg, W, A
     movwf   GLCD_cnt_pg, A
     
 GLCD_Clear_Loop:
     movf    GLCD_cnt_y, W, A   ; Load GLCD_cnt_y into W
-    subwf   clear_y, W, A        ; Compute W = y_add - GLCD_cnt_y
+    subwf   y_add, W, A        ; Compute W = y_add - GLCD_cnt_y
     call    GLCD_Set_CS
 
     movf    GLCD_cnt_pg, W, A
@@ -1232,13 +1225,13 @@ _clear_loop2:
     
     incf    GLCD_cnt_pg, f, A
     
-    movf    clear_y, W, A
+    movf    y_add, W, A
     call    GLCD_Set_CS
     
     movf   _sprite_l, W, A
     movwf   GLCD_cnt_y, A
     
-    movf    clear_page, W, A   
+    movf    GLCD_pg, W, A   
     addwf   _sprite_h, W, A
     ;decf    WREG, W, A
     cpfseq  GLCD_cnt_pg, A
@@ -1282,21 +1275,21 @@ Column_Loop:
     return
 
 GLCD_Set_CS:    
-    clrf    y_adjusted, A
-    movwf   y_adjusted, A
+    clrf    GLCD_tmp, A
+    movwf   GLCD_tmp, A
     
     movlw   128
-    cpfslt  y_adjusted, A        ; Skip next if y_adjusted < 128
+    cpfslt  GLCD_tmp, A        ; Skip next if y_adjusted < 128
     bra     GLCD_Disable_CS      ; If y_adjusted >= 128, turn off both CS1 and CS2
     
     movlw   64
-    cpfslt  y_adjusted, A        ; Skip next if WREG < 64
+    cpfslt  GLCD_tmp, A        ; Skip next if WREG < 64
     bra     GLCD_Use_CS2      ; If WREG >= 64, go to CS2
 
 GLCD_Use_CS1:
     bcf     LATB, GLCD_CS1, A
     bsf     LATB, GLCD_CS2, A
-    movf    y_adjusted, W, A
+    movf    GLCD_tmp, W, A
     call    GLCD_Set_Y        ; Directly set Y position
     return
 
@@ -1304,14 +1297,14 @@ GLCD_Use_CS2:
     bsf     LATB, GLCD_CS1, A
     bcf     LATB, GLCD_CS2, A
     movlw   64
-    subwf   y_adjusted, W, A        ; Adjust WREG (W = W - 64) before calling GLCD_Set_Y
+    subwf   GLCD_tmp, W, A        ; Adjust WREG (W = W - 64) before calling GLCD_Set_Y
     call    GLCD_Set_Y
     return
 
 GLCD_Disable_CS:
     bsf     LATB, GLCD_CS1, A
     bsf     LATB, GLCD_CS2, A   
-    movf    y_adjusted, W, A
+    movf    GLCD_tmp, W, A
     call    GLCD_Set_Y        ; Directly set Y position
     return
 

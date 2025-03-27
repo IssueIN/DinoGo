@@ -30,14 +30,14 @@ extrn	Agent_Freq, active_agent_flag
 extrn	agent_1_y, agent_2_y, agent_1_bird_h, agent_2_bird_h
     
 global	Prepare_State_Vector
-global	obstacle_distance, obstacle_height, game_speed
+global	norm_distance, norm_height, norm_speed
     
 psect   udata_acs
  ; Game state vector for ML inference
-obstacle_distance:  ds 1    ; Distance to nearest obstacle
-obstacle_height:    ds 1    ; Height of the obstacle (page number)
+norm_distance:  ds 1    ; Distance to nearest obstacle
+norm_height:    ds 1    ; Height of the obstacle (page number)
 ;dino_vertical_pos:  ds 1    ; Current dinosaur vertical position
-game_speed:         ds 1    ; Current game speed
+norm_speed:         ds 1    ; Current game speed
 tmp:		    ds 1
 
 psect   mlhandler_code,class=CODE
@@ -46,11 +46,11 @@ psect   mlhandler_code,class=CODE
 Prepare_State_Vector:
      ; Get distance to nearest obstacle
      call    Get_Nearest_Obstacle_Distance
-     movwf   obstacle_distance, A
+     movwf   norm_distance, A
      
      ; Get height of obstacle
      call    Get_Nearest_Obstacle_Height
-     movwf   obstacle_height, A
+     movwf   norm_height, A
      
 ;     ; Set dinosaur vertical position
 ;     movf    DINO_page, W, A
@@ -58,11 +58,11 @@ Prepare_State_Vector:
      
      ; Get current game speed (from spawn.s current_agent_freq)
      ; For now, just use a simple value based on score
-;     movf    Agent_Freq, W, A
-;     movwf   game_speed, A
-;     sublw   21
-;     movwf   game_speed, A
-;     
+     movf    Agent_Freq, W, A
+     movwf   norm_speed, A
+     sublw   21
+     movwf   norm_speed, A
+     
      return
  
  ; Function to find nearest obstacle distance
@@ -179,3 +179,4 @@ use_cactus_small:
     movlw   6
     return
 
+end
