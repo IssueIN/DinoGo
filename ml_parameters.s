@@ -29,7 +29,7 @@ GLOBAL  fc2_weight
 GLOBAL  fc2_bias
 GLOBAL  scales
 
-; Reserve space in data memory (Access RAM where possible for performance)
+; Reserve space in program memory for parameters
 psect   ml_params,class=CODE
 
 ;-------------------------------------------------------------------------------

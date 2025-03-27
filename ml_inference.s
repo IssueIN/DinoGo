@@ -24,17 +24,15 @@
 #include <xc.inc>
 
 ; External references for the ML parameters
-extrn  fc1_weight
-extrn  fc1_bias
-extrn  fc2_weight
-extrn  fc2_bias
-extrn  scales
+extrn  fc1_weight, fc1_bias, fc2_weight, fc2_bias, scales
+
+; External references for game state variables
 extrn  obstacle_distance, obstacle_height, game_speed
 
 ; Global declaration for the inference function
-GLOBAL  ML_Inference, Normalize_Game_State
+GLOBAL  ML_Inference
 
-; Memory allocation in Access RAM for state vector and intermediate results
+; Memory allocation in Access RAM for intermediate results
 psect   udata_acs_ovr
 ; Input state vector (normalized)
 norm_distance:    ds 1    ; normalized obstacle distance
@@ -63,9 +61,11 @@ counter_i:      ds 1    ; Loop counter for inputs
 counter_h:      ds 1    ; Loop counter for hidden neurons
 counter_o:      ds 1    ; Loop counter for output neurons
 addr_ptr:       ds 2    ; Address pointer (low, high)
-    
-tmp_value:      ds 1
-tmp_acc:        ds 1
+weight_idx:     ds 1    ; Weight matrix index
+input_offset:   ds 1    ; Input offset calculator
+ 
+tmp_value:	ds 1
+tmp_acc:	ds 1
 
 psect   ml_code,class=CODE
 
@@ -73,22 +73,23 @@ psect   ml_code,class=CODE
 ; Normalize_Game_State - Convert raw game state to normalized inputs
 ;-------------------------------------------------------------------------------
 Normalize_Game_State:
-    ; In this simple implementation, we'll do a basic linear scaling
-    ; from raw values to normalized values (-1 to 1 range, represented as signed 8-bit)
+    ; In this implementation, we'll do a basic linear scaling
+    ; from raw values to normalized values suitable for ML input
     
     ; Normalize obstacle distance (0-255 ? -128 to 127)
-    ; For simplicity, we'll just use the raw value shifted
+    ; For simplicity, we'll just use the raw value
     movf    obstacle_distance, W, A
     movwf   norm_distance, A
     
     ; Normalize obstacle height (0-7 ? -128 to 127)
-    ; Scale by multiplying by ~25
+    ; Scale by multiplying by ~25 to use more of the input range
     movf    obstacle_height, W, A
-    ;call    Mul25
+    mullw   25
+    movf    PRODL, W, A
     movwf   norm_height, A
     
     ; Normalize game speed (0-255 ? -128 to 127)
-    ; For simplicity, we'll just use the raw value shifted
+    ; For simplicity, we'll just use the raw value
     movf    game_speed, W, A
     movwf   norm_speed, A
     
@@ -98,14 +99,14 @@ Normalize_Game_State:
 ; ML_Inference - Main entry point for ML inference
 ;-------------------------------------------------------------------------------
 ML_Inference:
-    ; Save working registers that we'll use
-    movwf   temp_w, A          ; Save any incoming value in WREG
+    ; Save any incoming value
+    movwf   temp_w, A
     
     ; Step 0: Normalize the input state
     call    Normalize_Game_State
     
     ;---------------------------------------------------------------------------
-    ; Step 1: Compute hidden layer outputs (8 neurons)
+    ; Step 1: Load biases into hidden neurons
     ;---------------------------------------------------------------------------
     
     ; Set up FSR0 to point to the hidden layer outputs
@@ -121,16 +122,20 @@ ML_Inference:
     movwf   FSR1H, A
     
     ; Initialize counter for hidden neurons
-    movlw   8           ; 8 hidden neurons in new model
+    movlw   8                 ; 8 hidden neurons
     movwf   counter_h, A
     
-Hidden_Loop:
+Hidden_Bias_Loop:
     ; Load bias into the current hidden neuron output
-    movf    POSTINC1, W, A     ; Load bias and increment FSR1
-    movwf   POSTINC0, A        ; Store to hidden_outX and increment FSR0
+    movf    POSTINC1, W, A    ; Get bias and increment FSR1
+    movwf   POSTINC0, A       ; Store to hidden_outX and increment FSR0
     
-    decfsz  counter_h, F, A    ; Decrement counter, skip if zero
-    bra     Hidden_Loop        ; Loop for all hidden neurons
+    decfsz  counter_h, F, A   ; Decrement counter, skip if zero
+    bra     Hidden_Bias_Loop  ; Loop for all hidden neurons
+    
+    ;---------------------------------------------------------------------------
+    ; Step 2: Process all inputs for each hidden neuron
+    ;---------------------------------------------------------------------------
     
     ; Reset FSR0 to the beginning of hidden outputs
     movlw   LOW(hidden_out0)
@@ -138,60 +143,88 @@ Hidden_Loop:
     movlw   HIGH(hidden_out0)
     movwf   FSR0H, A
     
-    ; Set up a loop to process all 8 hidden neurons
+    ; Process each of the 8 hidden neurons
     movlw   8
     movwf   counter_h, A
     
-    ; Set up FSR1 to point to the weights for input?hidden
-    movlw   LOW(fc1_weight)
+Hidden_Neuron_Loop:
+    ; For each hidden neuron, we'll process all 3 inputs
+    movlw   LOW(norm_distance) ; Point to our normalized inputs
     movwf   FSR1L, A
-    movlw   HIGH(fc1_weight)
+    movlw   HIGH(norm_distance)
     movwf   FSR1H, A
     
-Process_Hidden:
-    ; Save the current hidden neuron pointer
-    movf    FSR0L, W, A
-    movwf   addr_ptr, A
-    movf    FSR0H, W, A
-    movwf   addr_ptr+1, A
+    ; Calculate weight matrix index for current hidden neuron
+    ; For hidden neuron h, we need weights at:
+    ; Input 0: fc1_weight + h
+    ; Input 1: fc1_weight + 8 + h
+    ; Input 2: fc1_weight + 16 + h
     
-    ; Process each input for this hidden neuron
-    movlw   3                  ; 3 inputs in new model
+    ; First, save which hidden neuron we're processing (0-7)
+    movlw   8
+    subwf   counter_h, W, A   ; W = 8 - counter_h (gives 0-7 index)
+    movwf   weight_idx, A     ; Save index
+    
+    ; Process each of the 3 inputs
+    movlw   3
     movwf   counter_i, A
     
-    ; Set up pointer to the normalized inputs
-    movlw   LOW(norm_distance)
+    ; Initialize input offset at 0
+    movlw   0
+    movwf   input_offset, A
+    
+Input_Loop:
+    ; Get weight for this input-hidden connection
+    ; Position = fc1_weight + (input_offset * 8) + weight_idx
+    
+    ; Calculate position in weight matrix
+    movlw   LOW(fc1_weight)
     movwf   FSR2L, A
-    movlw   HIGH(norm_distance)
+    movlw   HIGH(fc1_weight)
     movwf   FSR2H, A
     
-Process_Input:
-    ; Multiply input by weight and add to hidden neuron output
-    ; hidden_outi += state_vecj * weight_ij
-    movf    POSTINC1, W, A     ; Get weight from fc1_weight and increment
-    movwf   temp_w, A          ; Save weight
+    ; Add input offset (0, 8, or 16)
+    movf    input_offset, W, A
+    addwf   FSR2L, F, A
     
-    mulwf   POSTINC2, A        ; Multiply by input and increment FSR2
+    ; Add hidden neuron index (0-7)
+    movf    weight_idx, W, A
+    addwf   FSR2L, F, A
     
-    ; Add the product to the hidden neuron output
-    movf    PRODL, W, A        ; Get low byte of product
-    addwf   INDF0, F, A        ; Add to hidden neuron output
+    ; Get the weight
+    movf    INDF2, W, A       ; Get weight
+    movwf   temp_w, A         ; Store for multiplication
     
-    decfsz  counter_i, F, A    ; Decrement input counter, skip if zero
-    bra     Process_Input      ; Process next input
+    ; Get input value
+    movf    POSTINC1, W, A    ; Get input and increment FSR1
     
-    ; Apply ReLU activation function: max(0, x)
-    btfsc   INDF0, 7, A        ; Check if negative (bit 7 set)
-    clrf    INDF0, A           ; If negative, set to 0
+    ; Multiply input by weight
+    mulwf   temp_w, A         ; input * weight -> PRODH:PRODL
+    
+    ; Add product to hidden neuron activation
+    movf    PRODL, W, A       ; Get low byte of product
+    addwf   INDF0, F, A       ; Add to hidden neuron output
+    
+    ; Update input offset for next input (add 8 each time)
+    movlw   8
+    addwf   input_offset, F, A
+    
+    ; Move to next input
+    decfsz  counter_i, F, A   ; Decrement input counter
+    bra     Input_Loop        ; Loop for next input
+    
+    ; Apply ReLU activation: max(0, x)
+    btfsc   INDF0, 7, A       ; Check if negative (bit 7 set)
+    clrf    INDF0, A          ; If negative, set to 0
     
     ; Move to next hidden neuron
-    incf    FSR0L, F, A        ; Increment FSR0 to next hidden neuron
+    incf    FSR0L, F, A       ; Increment FSR0 to next hidden neuron
     
-    decfsz  counter_h, F, A    ; Decrement hidden neuron counter, skip if zero
-    bra     Process_Hidden     ; Process next hidden neuron
+    decfsz  counter_h, F, A   ; Decrement hidden neuron counter
+    bra     Hidden_Neuron_Loop ; Process next hidden neuron
     
     ;---------------------------------------------------------------------------
-    ; Step 2: Compute output layer
+    ; Step 3: Load biases into output neurons
     ;---------------------------------------------------------------------------
     
     ; Set up FSR0 to point to the output layer
@@ -218,83 +251,93 @@ Output_Bias_Loop:
     decfsz  counter_o, F, A    ; Decrement counter, skip if zero
     bra     Output_Bias_Loop   ; Loop for all output neurons
     
+    ;---------------------------------------------------------------------------
+    ; Step 4: Process all hidden neurons for each output neuron
+    ;---------------------------------------------------------------------------
+    
     ; Reset FSR0 to the beginning of output neurons
     movlw   LOW(output_out0)
     movwf   FSR0L, A
     movlw   HIGH(output_out0)
     movwf   FSR0H, A
     
-    ; Process all hidden neurons for each output neuron
-    ; For each output neuron k:
-    ;   For each hidden neuron i:
-    ;     output_outk += hidden_outi * weight_ki
-    
-    ; Set up a loop to process all 3 output neurons
+    ; Process each of the 3 output neurons
     movlw   3
     movwf   counter_o, A
     
-Process_Output:
-    ; Save the current output neuron pointer
-    movf    FSR0L, W, A
-    movwf   addr_ptr, A
-    movf    FSR0H, W, A
-    movwf   addr_ptr+1, A
-    
-    ; Process each hidden neuron for this output neuron
-    movlw   8                  ; 8 hidden neurons in new model
-    movwf   counter_h, A
-    
-    ; Set up FSR2 to point to the hidden layer outputs
+Output_Neuron_Loop:
+    ; For each output neuron, process all 8 hidden neurons
     movlw   LOW(hidden_out0)
-    movwf   FSR2L, A
-    movlw   HIGH(hidden_out0)
-    movwf   FSR2H, A
-    
-    ; Calculate the offset in the weights array based on current output neuron
-    ; Offset = output_index (0-2)
-    movf    counter_o, W, A    ; Get remaining outputs
-    sublw   3                  ; 3 - counter_o
-    decf    WREG, W, A         ; (3 - counter_o) - 1 to get output index
-    
-    ; Set up FSR1 to point to the weights for hidden?output
-    ; We need to access the weights in a column-wise manner
-    movlw   LOW(fc2_weight)
     movwf   FSR1L, A
-    movlw   HIGH(fc2_weight)
+    movlw   HIGH(hidden_out0)
     movwf   FSR1H, A
     
-    ; Adjust FSR1 based on output index
-    addwf   FSR1L, F, A        ; Add offset to FSR1L
+    ; Calculate weight matrix index for current output neuron
+    ; For output neuron o, we need weights at:
+    ; Hidden 0: fc2_weight + (o*8) + 0
+    ; Hidden 1: fc2_weight + (o*8) + 1
+    ; etc.
     
-Process_Hidden_For_Output:
-    ; Multiply hidden output by weight and add to output neuron
-    ; output_outk += hidden_outi * weight_ki
-    movf    INDF1, W, A        ; Get weight
-    movwf   temp_w, A          ; Save weight
+    ; First, determine output index (0-2)
+    movlw   3
+    subwf   counter_o, W, A   ; W = 3 - counter_o (gives 0-2 index)
     
-    mulwf   POSTINC2, A        ; Multiply by hidden neuron output and increment FSR2
+    ; Multiply by 8 to get row offset
+    movwf   temp_w, A
+    bcf     STATUS, 0, A      ; Clear carry
+    rlcf    temp_w, F, A      ; Rotate left (x2)
+    rlcf    temp_w, F, A      ; Rotate left (x4)
+    rlcf    temp_w, F, A      ; Rotate left (x8)
     
-    ; Add the product to the output neuron
-    movf    PRODL, W, A        ; Get low byte of product
-    addwf   INDF0, F, A        ; Add to output neuron
+    ; Save base offset for this output neuron
+    movf    temp_w, W, A
+    movwf   input_offset, A   ; Reusing input_offset variable
     
-    ; Move to the next weight for this output neuron (skip to next column)
-    movlw   3                  ; Each row has 3 weights
-    addwf   FSR1L, F, A        ; Jump to next row, same column
+    ; Process each of the 8 hidden neurons
+    movlw   8
+    movwf   counter_h, A
     
-    decfsz  counter_h, F, A    ; Decrement hidden neuron counter, skip if zero
-    bra     Process_Hidden_For_Output    ; Process next hidden neuron
+Hidden_To_Output_Loop:
+    ; Calculate position in fc2_weight matrix
+    movlw   LOW(fc2_weight)
+    movwf   FSR2L, A
+    movlw   HIGH(fc2_weight)
+    movwf   FSR2H, A
     
-    ; No ReLU for output layer (we want to keep negative values for comparison)
+    ; Add output row offset
+    movf    input_offset, W, A
+    addwf   FSR2L, F, A
+    
+    ; Add column offset (which hidden neuron)
+    movlw   8
+    subwf   counter_h, W, A   ; W = 8 - counter_h (0-7 index)
+    addwf   FSR2L, F, A
+    
+    ; Get the weight
+    movf    INDF2, W, A       ; Get weight
+    movwf   temp_w, A         ; Store weight
+    
+    ; Get hidden neuron output
+    movf    POSTINC1, W, A    ; Get hidden output and move to next
+    
+    ; Multiply hidden output by weight
+    mulwf   temp_w, A         ; hidden_out * weight -> PRODH:PRODL
+    
+    ; Add product to output neuron activation
+    movf    PRODL, W, A       ; Get low byte of product
+    addwf   INDF0, F, A       ; Add to output neuron
+    
+    decfsz  counter_h, F, A   ; Decrement hidden neuron counter
+    bra     Hidden_To_Output_Loop ; Process next hidden neuron
     
     ; Move to next output neuron
-    incf    FSR0L, F, A        ; Increment FSR0 to next output neuron
+    incf    FSR0L, F, A       ; Move to next output neuron
     
-    decfsz  counter_o, F, A    ; Decrement output neuron counter, skip if zero
-    bra     Process_Output     ; Process next output neuron
+    decfsz  counter_o, F, A   ; Decrement output neuron counter
+    bra     Output_Neuron_Loop ; Process next output neuron
     
     ;---------------------------------------------------------------------------
-    ; Step 3: Find the maximum output (ArgMax) to determine the action
+    ; Step 5: Find the maximum output (ArgMax) to determine the action
     ;---------------------------------------------------------------------------
     
     ; Load the three output values
@@ -381,5 +424,6 @@ Double8_Loop:
 
     return
 
+    
     
 END                            ; End of module
