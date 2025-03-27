@@ -58,11 +58,11 @@ Prepare_State_Vector:
      
      ; Get current game speed (from spawn.s current_agent_freq)
      ; For now, just use a simple value based on score
-     movf    Agent_Freq, W, A
-     movwf   game_speed, A
-     sublw   21
-     movwf   game_speed, A
-     
+;     movf    Agent_Freq, W, A
+;     movwf   game_speed, A
+;     sublw   21
+;     movwf   game_speed, A
+;     
      return
  
  ; Function to find nearest obstacle distance

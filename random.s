@@ -3,6 +3,7 @@
 ; Export functions for use in other files
 global  Initialize_RNG, Next_RNG, Display_RNG
 global  Get_Random_Obstacle, Get_Random_Height
+global	Draw_Digit
 
 ; Import only what we need from GLCD system
 extrn   GLCD_Set_Page, GLCD_Set_CS, GLCD_Data

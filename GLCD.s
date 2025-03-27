@@ -5,7 +5,7 @@ global	GLCD_Render_DINO_DUCK1, GLCD_Render_DINO_DUCK2, GLCD_Render_Bird1, GLCD_R
 global	GLCD_Render_Cactus_Large, GLCD_Render_Cactus_Medium, GLCD_Render_Cactus_Small
 global	GLCD_CMD, GLCD_Set_Page, GLCD_Set_Y, GLCD_Set_CS, GLCD_Clear_DINO_JUMP
 global	GLCD_Clear_Cactus_Large, GLCD_Clear_Cactus_Medium, GLCD_Clear_Cactus_Small, GLCD_Clear_Bird1, GLCD_Clear_Bird2
-global	GLCD_Render_GameOver, GLCD_Render_RestartMessage
+global	GLCD_Render_GameOver, GLCD_Render_RestartMessage, GLCD_Render_ML
 global	GLCD_Read_Screen_UART, GLCD_Render_RNG, GLCD_Render_Slash, GLCD_Render_Speed
 extrn	page_coord, y_coord, DINO_page, DINO_y
 extrn	UART_Transmit_Byte
@@ -197,6 +197,11 @@ SPEED_DATA:
     db  0x7F, 0x49, 0x49, 0x49, 0x41, 0x00  ; E
     db  0x7F, 0x41, 0x41, 0x22, 0x1C, 0x00  ; D
     db  0x00, 0x36, 0x36, 0x00, 0x00 ; :
+  
+ML_DATA:
+    db	0x7F, 0x02, 0x0C, 0x02, 0x7F, 0x00  ; M
+    db	0x7F, 0x40, 0x40, 0x40, 0x40, 0x00  ; L
+    db  0x00, 0x36, 0x36, 0x00, 0x00 ; :
     
 ; ; Game Over character data
 ;CHAR_G_DATA:
@@ -271,6 +276,9 @@ SLASH_SIZE	EQU 7
 SPEED_L		EQU 35
 SPEED_H		EQU 1
 SPEED_SIZE	EQU 35
+ML_L		EQU 17
+ML_H		EQU 1
+ML_SIZE		EQU 17
 ;align 12
 
 psect	glcd_code,class=CODE
@@ -783,6 +791,30 @@ GLCD_Render_Speed:
     movlw   1              ; Page 6 (bottom of screen)
     movwf   GLCD_pg, A
     movlw   40              ; Y-position (slightly indented from left)
+    movwf   y_add, A
+    
+    call    GLCD_Render_Sprite
+    return
+  
+GLCD_Render_ML:
+    movlw   ML_H
+    movwf   _sprite_h, A
+    movlw   ML_L
+    movwf   _sprite_l, A
+    movlw   ML_SIZE
+    movwf   GLCD_counter, A
+    
+    movlw   low	highword(ML_DATA)    ; address of data in PM
+    movwf   TBLPTRU, A	; Load upper bits to TBLPTRU
+    movlw   high(ML_DATA) ; address of data in PM
+    movwf   TBLPTRH, A    ; load high byte to TBLPTRH
+    movlw   low(ML_DATA)  ; Fix: Use RESTART_SLOGAN_DATA instead of Slogan_DATA
+    movwf   TBLPTRL, A    ; load low byte to TBLPTRL
+
+    ; Set position for restart message (bottom of screen)
+    movlw   2              ; Page 6 (bottom of screen)
+    movwf   GLCD_pg, A
+    movlw   97              ; Y-position (slightly indented from left)
     movwf   y_add, A
     
     call    GLCD_Render_Sprite

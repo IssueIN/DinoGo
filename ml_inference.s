@@ -63,6 +63,9 @@ counter_i:      ds 1    ; Loop counter for inputs
 counter_h:      ds 1    ; Loop counter for hidden neurons
 counter_o:      ds 1    ; Loop counter for output neurons
 addr_ptr:       ds 2    ; Address pointer (low, high)
+    
+tmp_value:      ds 1
+tmp_acc:        ds 1
 
 psect   ml_code,class=CODE
 
@@ -81,8 +84,7 @@ Normalize_Game_State:
     ; Normalize obstacle height (0-7 ? -128 to 127)
     ; Scale by multiplying by ~25
     movf    obstacle_height, W, A
-    mullw   25
-    movf    PRODL, W, A
+    ;call    Mul25
     movwf   norm_height, A
     
     ; Normalize game speed (0-255 ? -128 to 127)
@@ -342,5 +344,42 @@ Return_Idle:
 Return_Action:
     ; Return the action in WREG
     return
+ 
+Mul25:
+; Input: WREG = obstacle_height (signed)
+; Output: norm_height (signed)
+; Temporaries: tmp_value, tmp_acc
+
+    movwf   tmp_value, A      ; save input
+
+    ; --- Compute value×16 via 4 doublings ---
+    movf    tmp_value, W, A
+    movwf   tmp_acc , A       ; accumulator = value
+    movlw   4
+Double16_Loop:
+    movf    tmp_acc, W, A
+    addwf   tmp_acc, F, A     ; tmp_acc *= 2
+    decfsz  WREG, F, A
+    bra     Double16_Loop
+
+    movwf   norm_height, A    ; store value×16
+
+    ; --- Compute value×8 via 3 doublings ---
+    movf    tmp_value, W, A
+    movwf   tmp_acc, A
+    movlw   3
+Double8_Loop:
+    movf    tmp_acc, W, A
+    addwf   tmp_acc, F, A
+    decfsz  WREG, F, A
+    bra     Double8_Loop
+
+    ; Add (value×8) + (value×16) + value
+    addwf   norm_height, F, A
+    movf    tmp_value, W, A
+    addwf   norm_height, F, A
+
+    return
+
     
 END                            ; End of module

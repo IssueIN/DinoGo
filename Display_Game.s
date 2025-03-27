@@ -1,6 +1,6 @@
 #include <xc.inc>
 extrn	GLCD_Render_Cactus, GLCD_Render_DINO_RUN1, GLCD_Clear_Screen, GLCD_Render_DINO_RUN2, GLCD_Render_DINO_JUMP, GLCD_Render_DINO_DUCK1, GLCD_Render_DINO_DUCK2 
-extrn	GLCD_Render_Bird1, GLCD_Render_Bird2, GLCD_Clear_DINO_JUMP
+extrn	GLCD_Render_Bird1, GLCD_Render_Bird2, GLCD_Clear_DINO_JUMP, GLCD_Render_ML
 extrn	Button_Read
 extrn	pressed_button
 extrn	GLCD_Render_Cactus_Large, GLCD_Render_Cactus_Medium, GLCD_Render_Cactus_Small 
@@ -8,7 +8,7 @@ extrn	Update_Score, Display_Score, Display_High_Score, Check_Update_High_Score
 extrn	Update_Spawn_Timer, Render_Agent_1,Render_Agent_2, Get_Agent_1_type, Get_Agent_2_type, Update_Agent_1, Update_Agent_2
 extrn	Check_Collision, Is_Game_Over
 extrn	GameOverHandler
-extrn	GLCD_Read_Screen_UART, Display_RNG
+extrn	GLCD_Read_Screen_UART, Display_RNG, Draw_Digit
 extrn	Display_Agent_Freq
 extrn	ML_Inference, Normalize_Game_State
 extrn	delay_x4us, delay_ms
@@ -34,7 +34,7 @@ DINO_STATE:	    ds 1    ; 0=idle, 1 = ascending, 2 = descending, 3=ducking
 JUMP_DELAY:	    ds 1    ; frames to wait at this phases
 
 psect	data
-FRAME_DELAY	    EQU 10
+FRAME_DELAY	    EQU 3
 SCORE_UPDATE_FREQ   EQU	30
 
 psect	game_display_code,class=CODE
@@ -88,6 +88,9 @@ ML_Mode:
     call    Normalize_Game_State
     call    ML_Inference
     movwf   pressed_button, A
+    call    GLCD_Render_ML
+    movf    pressed_button, W, A
+    call    Draw_Digit
     
 DINO_Action:
     movlw   1
